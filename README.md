@@ -1,51 +1,44 @@
+# SOLMAR BAY
+
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/qsc985/solmar-bay/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/qsc985/solmar-bay/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-# SOLMAR BAY — an open-world crime story
+An open-world crime game in the spirit of GTA 6, built for the make.fun gta6-01 bounty. You are Danny Reyes, new to the fictional coastal city of Solmar Bay. Drive a taxi, run packages, steal a Comet GT, take on the Viper gang, and pull the big bank job — five story missions, $2,200 on the line.
 
-A top-down 2D open-world crime game for the [make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01). You are Danny Reyes, a driver for hire in Solmar Bay, working off a debt to the fixer Lena Cruz. Five jobs, then the city is yours.
+## How to play
 
-## The story
+```
+node serve.ts
+```
 
-1. **First Fare** — drive the taxi from the depot to the pier.
-2. **The Package** — walk a package to the docks, on foot, no attention.
-3. **Hot Wheels** — steal the red Comet GT from the showroom lot, then lose the cops.
-4. **Payback** — four Vipers jumped one of Lena's drivers at the docks. Make it even.
-5. **The Big Score** — Solmar Bank at noon. Grab the bag, reach the safehouse.
+Then open http://localhost:8080/ in a desktop browser.
 
-Finish all five and free roam opens: taxi fares pay the rent.
+- **WASD / arrows** — walk and drive (Shift to run)
+- **E** — enter / steal a car, get out, pick up the package, grab the bank cash
+- **Mouse** — aim, click to shoot (drive-by shooting works from a car)
+- **R** — reload, **M** — mute
 
 ## The city
 
-A 2600×1900 grid city — 8 avenues × 7 streets, a park, a beach and the sea — with traffic that follows the road graph, pedestrians who stroll the sidewalks and flee gunfire, police who spawn at the city edge and ram you off the road, and a wanted system (stars cool off after 8 quiet seconds).
+A seeded open world (2400×1800): a road grid with traffic and pedestrians, parking lots, a beach and the sea, the docks and the pier, the Solmar Bank and a safehouse. Cars to steal, a wanted level with police cruisers that chase and shoot back, a HUD with cash, health, wanted stars and a live minimap, and a localStorage save.
 
-## Controls
+## The story
 
-- **WASD / arrows** — walk or drive (Shift to run)
-- **Mouse** — aim · **Click** — shoot · **R** — reload
-- **E** — enter / steal a car, pick up a package · **Esc** — pause · **M** — mute
+1. **Taxi Driver ($150)** — drive a fare to the pier.
+2. **The Package ($200)** — carry a package to the docks on foot.
+3. **Grand Theft ($350)** — steal the red Comet GT and lose a 3-star heat.
+4. **Viper Hunt ($500)** — drop all four Vipers at the docks.
+5. **The Big Score ($1,000)** — rob the bank at 4 stars and reach the safehouse.
 
-## Play it
+Finish all five and free-roam Solmar Bay with the heat cleared.
 
-No build step, no network at run time — the game is plain static files under `game/`:
+## Build
 
-```sh
-node serve.ts            # http://localhost:8080
+`main.ts` (Node 22, standard library only) copies `game/` and `screenshots/` to the output directory and writes `dossier.json` with the vendored make.fun library:
+
+```
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
-Or open `game/index.html` through any static server. `?seed=N` fixes the city layout; `?debug=1` exposes `window.__solmar` for automated playtests.
-
-## Build the dossier
-
-```sh
-MAKEFUN_OUTPUT_DIR=out node main.ts
-```
-
-This copies `game/` and `screenshots/` into `out/` and writes `out/dossier.json` (schema `makefun/dossier/v1`) with the 4 staged screenshots from `shots.json` (`?shot=start|drive|chase|mission&seed=1`).
-
-## Tech
-
-- ES modules, Canvas 2D, WebAudio (all sound synthesized — no audio files)
-- Node 22 stdlib only for the entrypoint (`main.ts`) and dev server (`serve.ts`)
-- Deterministic: `?seed=N` reproduces the same city, traffic and pedestrians
+Everything in `game/` is plain static files — no build step, no network requests. All art is drawn on canvas and all sound is synthesised with WebAudio.

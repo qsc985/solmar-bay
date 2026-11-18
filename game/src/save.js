@@ -1,44 +1,32 @@
-// Save / load through localStorage: cash, mission progress, position, health.
-// Everything is guarded — a full or private-mode store must never break the game.
+// Save and load: cash and mission progress in localStorage. The save is only
+// used in plain play — debug and screenshot runs always start fresh.
+
 import { SAVE_KEY } from './config.js';
 
 export function saveGame(G) {
   try {
     const data = {
       cash: G.player.cash,
-      mission: G.missions.index,
-      x: Math.round(G.player.x),
-      y: Math.round(G.player.y),
-      health: Math.round(G.player.health),
-      completed: G.missions.index >= 5,
+      missionIndex: G.missions.index,
+      missionStage: G.missions.stage,
+      savedAt: Date.now(),
     };
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    return true;
-  } catch {
-    return false;
-  }
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch { /* storage unavailable (private mode, headless) */ }
 }
 
 export function loadGame() {
   try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const d = JSON.parse(raw);
-    if (typeof d.cash !== 'number' || typeof d.mission !== 'number') return null;
-    return d;
+    const data = JSON.parse(raw);
+    if (typeof data.cash !== 'number' || typeof data.missionIndex !== 'number') return null;
+    return data;
   } catch {
     return null;
   }
 }
 
-export function hasSave() {
-  return loadGame() !== null;
-}
-
 export function clearSave() {
-  try {
-    window.localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // Private mode: nothing stored, nothing to clear.
-  }
+  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
 }

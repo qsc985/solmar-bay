@@ -1,1 +1,1 @@
-[{"name":"1-start.jpg","query":"?shot=start&seed=1"},{"name":"2-drive.jpg","query":"?shot=drive&seed=1"},{"name":"3-chase.jpg","query":"?shot=chase&seed=1"},{"name":"4-mission.jpg","query":"?shot=mission&seed=1"}]
+{"shots":[{"desc":"Title screen over the city","file":"1-start.jpg","name":"start"},{"desc":"Driving the taxi down 12th St on the M1 job","file":"2-drive.jpg","name":"drive"},{"desc":"Three-star police chase in the Comet GT","file":"3-chase.jpg","name":"chase"},{"desc":"Viper shootout at the docks, M4","file":"4-mission.jpg","name":"mission"}]}

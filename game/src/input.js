@@ -1,114 +1,106 @@
-// Keyboard + mouse, read fresh every frame. Keys are tracked by code, so the
-// player's keyboard layout doesn't matter.
-//
-// Edge-triggered presses are the subtle part. The world steps in fixed 1/60 s
-// sub-steps, and a tap that lands between two sub-steps must not be swallowed
-// by the first one: beginFrame snapshots whatever is pending when the frame
-// starts, and endFrame clears only that snapshot, so a press that arrives
-// mid-frame survives until the next frame.
-export const ACTION_CONFIRM = 'confirm';
-export const ACTION_PAUSE = 'pause';
-export const ACTION_INTERACT = 'interact';
-export const ACTION_RELOAD = 'reload';
-export const ACTION_MUTE = 'mute';
+// Keyboard + mouse + touch input. Keys are tracked by code; the mouse reports
+// screen coordinates and a held state. Edge-triggered "pressed" flags are consumed
+// once per frame by the game loop.
 
-const ACTION_KEYS = {
-  confirm: ['Enter', 'Space'],
-  pause: ['Escape', 'KeyP'],
-  interact: ['KeyE'],
-  reload: ['KeyR'],
-  mute: ['KeyM'],
-};
+import { KEYS } from './config.js';
 
 export function createInput(canvas) {
-  const keys = new Set();
-  const pressed = new Set(); // edge-triggered presses, consumed by takePressed
-  let framePressed = new Set(); // presses pending when the frame began
-  let frameClicked = false;
-  const mouse = { x: 0, y: 0, down: false, clicked: false };
-
-  function onKeyDown(e) {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-      e.preventDefault();
-    }
-    if (!e.repeat) pressed.add(e.code);
-    keys.add(e.code);
-  }
-  function onKeyUp(e) {
-    keys.delete(e.code);
-  }
-  function onMouseMove(e) {
-    const r = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - r.left;
-    mouse.y = e.clientY - r.top;
-  }
-  function onMouseDown(e) {
-    if (e.button === 0) {
-      mouse.down = true;
-      mouse.clicked = true;
-    }
-  }
-  function onMouseUp(e) {
-    if (e.button === 0) mouse.down = false;
-  }
-  function onBlur() {
-    keys.clear();
-    mouse.down = false;
-  }
-
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
-  window.addEventListener('blur', onBlur);
-  canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('mousedown', onMouseDown);
-  window.addEventListener('mouseup', onMouseUp);
-
-  return {
-    mouse,
-
-    down(...codes) {
-      return codes.some((c) => keys.has(c));
-    },
-
+  const input = {
+    keys: new Set(),
+    pressed: new Set(),
+    mouse: { x: 0, y: 0, down: false, clicked: false },
+    touch: { active: false, dx: 0, dy: 0 },
     axis() {
       let x = 0;
       let y = 0;
-      if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
-      if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
-      if (keys.has('KeyW') || keys.has('ArrowUp')) y -= 1;
-      if (keys.has('KeyS') || keys.has('ArrowDown')) y += 1;
+      if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
+      if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
+      if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y -= 1;
+      if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y += 1;
       return { x, y };
     },
-
     run() {
-      return keys.has('ShiftLeft') || keys.has('ShiftRight');
+      return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     },
-
-    // Consume one pending press for an action; true when it was there.
-    takePressed(action) {
-      for (const c of ACTION_KEYS[action] ?? []) {
-        if (pressed.has(c)) {
-          pressed.delete(c);
-          return true;
-        }
-      }
-      return false;
+    wasPressed(code) {
+      return this.pressed.has(code);
     },
-
-    takeClick() {
-      const c = mouse.clicked;
-      mouse.clicked = false;
-      return c;
-    },
-
-    beginFrame() {
-      framePressed = new Set(pressed);
-      frameClicked = mouse.clicked;
-    },
-
     endFrame() {
-      for (const c of framePressed) pressed.delete(c);
-      if (frameClicked) mouse.clicked = false;
+      this.pressed.clear();
+      this.mouse.clicked = false;
     },
   };
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+    if (!e.repeat) input.pressed.add(e.code);
+    input.keys.add(e.code);
+  });
+  window.addEventListener('keyup', (e) => input.keys.delete(e.code));
+  window.addEventListener('blur', () => input.keys.clear());
+
+  const setMouse = (e) => {
+    const r = canvas.getBoundingClientRect();
+    input.mouse.x = e.clientX - r.left;
+    input.mouse.y = e.clientY - r.top;
+  };
+  canvas.addEventListener('mousemove', setMouse);
+  canvas.addEventListener('mousedown', (e) => {
+    setMouse(e);
+    input.mouse.down = true;
+    input.mouse.clicked = true;
+  });
+  window.addEventListener('mouseup', () => { input.mouse.down = false; });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Minimal touch: left half is a virtual stick, right half aims/shoots.
+  let stickId = null;
+  let stickOrigin = null;
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const r = canvas.getBoundingClientRect();
+      const x = t.clientX - r.left;
+      const y = t.clientY - r.top;
+      if (x < r.width / 2 && stickId === null) {
+        stickId = t.identifier;
+        stickOrigin = { x, y };
+      } else {
+        input.mouse.x = x;
+        input.mouse.y = y;
+        input.mouse.down = true;
+        input.mouse.clicked = true;
+      }
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const r = canvas.getBoundingClientRect();
+      if (t.identifier === stickId && stickOrigin) {
+        input.touch.active = true;
+        input.touch.dx = (t.clientX - r.left - stickOrigin.x) / 50;
+        input.touch.dy = (t.clientY - r.top - stickOrigin.y) / 50;
+      } else {
+        input.mouse.x = t.clientX - r.left;
+        input.mouse.y = t.clientY - r.top;
+      }
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickId) {
+        stickId = null;
+        stickOrigin = null;
+        input.touch.active = false;
+        input.touch.dx = 0;
+        input.touch.dy = 0;
+      }
+    }
+    input.mouse.down = false;
+  });
+
+  return input;
 }
+
+export { KEYS };

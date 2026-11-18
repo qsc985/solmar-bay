@@ -1,21 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solmar Bay — an open-world crime story</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SOLMAR BAY — an open-world crime story</title>
 <link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #10131a; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
-  #game { display: block; background: #8fc97e; }
-  #status { position: fixed; left: 8px; bottom: 6px; color: rgba(255,255,255,0.5);
-    font: 12px system-ui, sans-serif; pointer-events: none; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a0e14; }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: crosshair; }
 </style>
 </head>
 <body>
-<canvas id="game" width="1280" height="720"></canvas>
-<div id="status">SOLMAR BAY — WASD move &amp; drive · E enter / steal car · CLICK shoot · ESC pause</div>
+<canvas id="game"></canvas>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

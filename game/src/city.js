@@ -1,160 +1,166 @@
-// Solmar Bay: a sun-soaked coastal city. Roads on a grid, buildings fill the
-// blocks, a park in the middle, a beach and the sea along the south edge.
-// The road graph (a node at every intersection) is what traffic drives on.
-import { WORLD, PAL } from './config.js';
+// The city of Solmar Bay: a road grid, buildings inside the blocks, trees, parking
+// lots, the beach and the sea. Generation is seeded, so the same seed always builds
+// the same city. Fixed story spots (taxi, Comet GT, pier, bank, safehouse) are kept
+// clear of buildings.
 
-export const ROAD_W = 64; // vertical avenue width
-export const ROAD_H = 56; // horizontal street width
-export const AVENUES = [200, 500, 800, 1100, 1400, 1700, 2000, 2300];
-export const STREETS = [200, 450, 700, 950, 1200, 1450, 1700];
+import { WORLD_W, WORLD_H, ROADS_H, ROADS_V, ROAD_HALF, SEA_Y, BEACH_Y, PAL, TAXI_SPOT, COMET_SPOT, PIER, DOCKS, BANK_SPOT, SAFEHOUSE, PACKAGE_SPOT } from './config.js';
+import { makeRng, clamp } from './random.js';
 
-// Do the rectangles (ax0,ay0)-(ax1,ay1) and b overlap at all?
-function overlaps(ax0, ay0, ax1, ay1, b) {
-  return ax0 < b.x + b.w && ax1 > b.x && ay0 < b.y + b.h && ay1 > b.y;
+// Places nothing may be built on top of (x, y, keep-clear radius).
+const CLEARINGS = [
+  { ...TAXI_SPOT, r: 90 },
+  { ...COMET_SPOT, r: 90 },
+  { ...PIER, r: 130 },
+  { ...DOCKS, r: 150 },
+  { ...BANK_SPOT, r: 110 },
+  { ...SAFEHOUSE, r: 110 },
+  { ...PACKAGE_SPOT, r: 90 },
+];
+
+function nearClearing(x, y, pad = 0) {
+  for (const c of CLEARINGS) {
+    if (Math.hypot(x - c.x, y - c.y) < c.r + pad) return true;
+  }
+  return false;
 }
 
-export function createCity(rng) {
+export function createCity(seed) {
+  const rng = makeRng(seed);
   const buildings = [];
   const trees = [];
-  const park = { x: 880, y: 1010, w: 420, h: 170 };
-  const lots = []; // open lots where parked cars sit
-  const bank = { x: 1150, y: 760, w: 90, h: 60 };
-  const depot = { x: 480, y: 1300, w: 120, h: 70 };
-  const docks = { x: 2050, y: 1300, w: 180, h: 120 };
-  const safehouse = { x: 210, y: 240, w: 90, h: 60 };
+  const lots = [];
 
-  // Buildings: every block between two avenues and two streets gets 1-3
-  // rooftops. The park and the docks stay open, and the mission spots (bank,
-  // depot, safehouse) are kept clear with a margin, so a pickup or a spawn
-  // can never land inside a rooftop. The overlap test is a real rect test —
-  // checking only a block's corner lets buildings creep into the lots.
-  const keepClear = [
-    park,
-    docks,
-    { x: bank.x - 30, y: bank.y - 30, w: bank.w + 60, h: bank.h + 60 },
-    { x: depot.x - 30, y: depot.y - 30, w: depot.w + 60, h: depot.h + 60 },
-    { x: safehouse.x - 30, y: safehouse.y - 30, w: safehouse.w + 60, h: safehouse.h + 60 },
-  ];
-  for (let ai = 0; ai < AVENUES.length - 1; ai++) {
-    for (let si = 0; si < STREETS.length - 1; si++) {
-      const x0 = AVENUES[ai] + ROAD_W / 2 + 14;
-      const x1 = AVENUES[ai + 1] - ROAD_W / 2 - 14;
-      const y0 = STREETS[si] + ROAD_H / 2 + 14;
-      const y1 = STREETS[si + 1] - ROAD_H / 2 - 14;
-      if (overlaps(x0, y0, x1, y1, park) || overlaps(x0, y0, x1, y1, docks)) continue;
+  // Buildings live inside the blocks between roads. Each block gets 0-3 buildings.
+  for (let hi = 0; hi < ROADS_H.length - 1; hi++) {
+    for (let vi = 0; vi < ROADS_V.length - 1; vi++) {
+      const x0 = ROADS_V[vi] + ROAD_HALF + 14;
+      const x1 = ROADS_V[vi + 1] - ROAD_HALF - 14;
+      const y0 = ROADS_H[hi] + ROAD_HALF + 14;
+      const y1 = ROADS_H[hi + 1] - ROAD_HALF - 14;
+      if (x1 - x0 < 90 || y1 - y0 < 90) continue;
+      // The south strip is beach; the docks block stays open.
+      if (y0 > BEACH_Y - 40) continue;
       const n = rng.int(1, 3);
       for (let k = 0; k < n; k++) {
-        const w = rng.range(70, Math.min(150, (x1 - x0) / n - 8));
-        const h = rng.range(55, Math.min(110, y1 - y0 - 16));
-        const x = x0 + ((x1 - x0 - w) * (n === 1 ? 0.5 : k / (n - 1 || 1))) + rng.range(-4, 4);
-        const y = y0 + rng.range(0, Math.max(0, y1 - y0 - h));
-        const bx = Math.min(x, x1 - w);
-        const by = y;
-        if (keepClear.some((r) => overlaps(bx, by, bx + w, by + h, r))) continue;
-        buildings.push({
-          x: bx, y: by, w, h,
-          color: rng.pick(PAL.buildingRoof),
-          roof: rng.pick(['flat', 'ac', 'pool', 'garden']),
-          hgt: rng.int(1, 3),
-        });
+        const w = rng.range(60, Math.min(150, x1 - x0 - 20));
+        const h = rng.range(50, Math.min(120, y1 - y0 - 20));
+        const x = rng.range(x0, x1 - w);
+        const y = rng.range(y0, y1 - h);
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        if (nearClearing(cx, cy, 30)) continue;
+        // Keep buildings from overlapping each other in the same block.
+        let clash = false;
+        for (const b of buildings) {
+          if (x < b.x + b.w + 18 && x + w + 18 > b.x && y < b.y + b.h + 18 && y + h + 18 > b.y) { clash = true; break; }
+        }
+        if (clash) continue;
+        const ci = rng.int(0, PAL.building.length - 1);
+        buildings.push({ x, y, w, h, color: PAL.building[ci], roof: PAL.roof[ci] });
       }
-      if (rng.next() < 0.5) {
-        lots.push({ x: x0 + rng.range(0, 40), y: y1 - 34, w: 90, h: 26 });
+      // A few trees per block.
+      const tn = rng.int(1, 4);
+      for (let k = 0; k < tn; k++) {
+        const tx = rng.range(x0, x1);
+        const ty = rng.range(y0, y1);
+        if (nearClearing(tx, ty, 10)) continue;
+        trees.push({ x: tx, y: ty, r: rng.range(9, 15) });
       }
     }
   }
 
-  // Trees in the park and along the beach.
-  for (let i = 0; i < 26; i++) {
-    trees.push({
-      x: park.x + rng.range(15, park.w - 15),
-      y: park.y + rng.range(15, park.h - 15),
-      r: rng.range(9, 15),
-    });
-  }
-  for (let i = 0; i < 14; i++) {
-    trees.push({
-      x: rng.range(60, WORLD.w - 60),
-      y: WORLD.beachY + rng.range(6, 30),
-      r: rng.range(8, 13),
-    });
-  }
-
-  // Road graph: one node per intersection.
-  const nodes = [];
-  for (const ax of AVENUES) {
-    for (const sy of STREETS) nodes.push({ x: ax, y: sy });
-  }
-  const nodeAt = (x, y) => nodes.find((n) => n.x === x && n.y === y);
+  // Parking lots: flat asphalt pads with marked bays, placed inside wide blocks.
+  const lotSpots = [
+    { x: 1650, y: 660, w: 110, h: 80 }, // the Comet GT's lot
+    { x: 1150, y: 240, w: 130, h: 70 },
+    { x: 600, y: 1450, w: 130, h: 70 },
+    { x: 1850, y: 1060, w: 120, h: 80 },
+  ];
+  for (const l of lotSpots) lots.push({ ...l, bays: 5 });
 
   return {
-    buildings, trees, park, lots, bank, depot, docks, safehouse,
-    nodes, nodeAt,
-
-    // Is a point on a road (drivable)? Avenues and streets, plus the beach strip.
-    onRoad(x, y) {
-      if (y > WORLD.beachY) return true;
-      for (const ax of AVENUES) if (Math.abs(x - ax) < ROAD_W / 2) return true;
-      for (const sy of STREETS) if (Math.abs(y - sy) < ROAD_H / 2) return true;
-      return false;
-    },
-
-    // Nearest road centre point, used to snap spawns onto roads.
-    nearestRoad(x, y) {
-      let best = null;
-      let bd = 1e9;
-      for (const ax of AVENUES) {
-        const d = Math.abs(x - ax);
-        if (d < bd) { bd = d; best = { x: ax, y }; }
-      }
-      for (const sy of STREETS) {
-        const d = Math.abs(y - sy);
-        if (d < bd) { bd = d; best = { x, y: sy }; }
-      }
-      return best;
-    },
-
-    // Circle vs building push-out; returns the corrected point and whether it hit.
-    collideCircle(x, y, r) {
-      let hit = false;
-      for (const b of buildings) {
-        const cx = Math.max(b.x, Math.min(x, b.x + b.w));
-        const cy = Math.max(b.y, Math.min(y, b.y + b.h));
-        const dx = x - cx;
-        const dy = y - cy;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < r * r) {
-          hit = true;
-          if (d2 > 0.01) {
-            const d = Math.sqrt(d2);
-            x = cx + (dx / d) * r;
-            y = cy + (dy / d) * r;
-          } else {
-            x += r;
-          }
-        }
-      }
-      if (x < r) { x = r; hit = true; }
-      if (x > WORLD.w - r) { x = WORLD.w - r; hit = true; }
-      if (y < r) { y = r; hit = true; }
-      if (y > WORLD.h - r) { y = WORLD.h - r; hit = true; }
-      return { x, y, hit };
-    },
+    seed,
+    roadsH: ROADS_H.slice(),
+    roadsV: ROADS_V.slice(),
+    buildings,
+    trees,
+    lots,
+    worldW: WORLD_W,
+    worldH: WORLD_H,
+    seaY: SEA_Y,
+    beachY: BEACH_Y,
   };
 }
 
-// A point on a sidewalk (beside a road, not on it) — where pedestrians walk.
-export function sidewalkPoint(rng, city) {
-  const ax = rng.pick(AVENUES);
-  const sy = rng.pick(STREETS);
-  if (rng.next() < 0.5) {
-    return {
-      x: ax + (rng.next() < 0.5 ? -1 : 1) * (ROAD_W / 2 + 12),
-      y: rng.range(60, WORLD.beachY - 40),
-    };
+// Is (x, y) on a road (within the asphalt, plus a small shoulder)?
+export function onRoad(city, x, y) {
+  for (const ry of city.roadsH) if (Math.abs(y - ry) <= ROAD_HALF + 6) return true;
+  for (const rx of city.roadsV) if (Math.abs(x - rx) <= ROAD_HALF + 6) return true;
+  return false;
+}
+
+// Nearest point on any road centreline to (x, y).
+export function nearestRoadPoint(city, x, y) {
+  let best = null;
+  let bd = Infinity;
+  for (const ry of city.roadsH) {
+    const d = Math.abs(y - ry);
+    if (d < bd) { bd = d; best = { x: clamp(x, 0, WORLD_W), y: ry }; }
   }
-  return {
-    x: rng.range(60, WORLD.w - 60),
-    y: sy + (rng.next() < 0.5 ? -1 : 1) * (ROAD_H / 2 + 12),
-  };
+  for (const rx of city.roadsV) {
+    const d = Math.abs(x - rx);
+    if (d < bd) { bd = d; best = { x: rx, y: clamp(y, 0, WORLD_H) }; }
+  }
+  return best;
+}
+
+// Circle-vs-building collision: slide the circle out of any building it overlaps.
+// Also clamps to the world and treats the sea as solid for cars and feet alike
+// (the pier area is reached on the docks, not by swimming).
+export function collideCircle(city, x, y, r, allowSea = false) {
+  let nx = clamp(x, r, WORLD_W - r);
+  let ny = clamp(y, r, WORLD_H - r);
+  for (const b of city.buildings) {
+    const cx = clamp(nx, b.x, b.x + b.w);
+    const cy = clamp(ny, b.y, b.y + b.h);
+    const dx = nx - cx;
+    const dy = ny - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < r * r) {
+      if (d2 === 0) { nx = b.x - r; continue; }
+      const d = Math.sqrt(d2);
+      nx = cx + (dx / d) * r;
+      ny = cy + (dy / d) * r;
+    }
+  }
+  if (!allowSea && ny + r > city.seaY) ny = city.seaY - r;
+  return { x: nx, y: ny };
+}
+
+// Does a circle at (x, y, r) touch any building?
+export function hitsBuilding(city, x, y, r) {
+  for (const b of city.buildings) {
+    const cx = clamp(x, b.x, b.x + b.w);
+    const cy = clamp(y, b.y, b.y + b.h);
+    if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return b;
+  }
+  return null;
+}
+
+// A random road point for spawning traffic / police, at least `minDist` from (x, y).
+export function randomRoadPoint(city, rng, x, y, minDist = 400) {
+  for (let tries = 0; tries < 20; tries++) {
+    const horizontal = rng.chance(0.5);
+    let px;
+    let py;
+    if (horizontal) {
+      py = rng.pick(city.roadsH);
+      px = rng.range(60, WORLD_W - 60);
+    } else {
+      px = rng.pick(city.roadsV);
+      py = rng.range(60, Math.min(WORLD_H - 60, city.seaY - 80));
+    }
+    if (Math.hypot(px - x, py - y) >= minDist) return { x: px, y: py };
+  }
+  return { x: 100, y: 100 };
 }

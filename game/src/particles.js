@@ -1,57 +1,49 @@
-// Particles, skid marks and floating text — the juice that makes impacts feel
-// real. Three capped lists; the oldest entries are dropped when a list
-// overflows, so a long session can never grow them without bound.
-//
-// Shape contract (render.js reads it): { list, floats } where a particle is
-// {x, y, vx, vy, life, maxLife, size, color} and a float is
-// {x, y, text, color, life, maxLife}. Skids are recorded but not drawn.
+// Particles and floating text: muzzle flashes, sparks, smoke, blood, cash popups.
+// Cheap circles and short-lived text; nothing here affects gameplay.
+
 export function createParticles() {
-  return { list: [], skids: [], floats: [] };
+  return { list: [], floats: [] };
 }
 
-export function puff(P, x, y, n, color, speed = 60, life = 0.6, size = 4) {
+export function addParticles(G, x, y, kind, n = 6) {
+  const colors = {
+    muzzle: ['#ffd23f', '#ff9f1c', '#fff3b0'],
+    spark: ['#ffd23f', '#ffffff', '#ff9f1c'],
+    smoke: ['#666666', '#888888', '#444444'],
+    blood: ['#c1121f', '#8e2f32', '#6d1a1a'],
+  };
+  const palette = colors[kind] ?? ['#ffffff'];
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
-    const s = speed * (0.4 + Math.random() * 0.8);
-    const l = life * (0.6 + Math.random() * 0.7);
-    P.list.push({
+    const sp = kind === 'smoke' ? 12 + Math.random() * 20 : 40 + Math.random() * 130;
+    G.particles.list.push({
       x, y,
-      vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      life: l, maxLife: l,
-      size: size * (0.7 + Math.random() * 0.6), color,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.35 + Math.random() * 0.45,
+      max: 0.8,
+      size: kind === 'smoke' ? 7 + Math.random() * 7 : 2 + Math.random() * 3,
+      color: palette[Math.floor(Math.random() * palette.length)],
     });
   }
-  if (P.list.length > 420) P.list.splice(0, P.list.length - 420);
 }
 
-export function skid(P, x, y, angle) {
-  P.skids.push({ x, y, angle, life: 5 });
-  if (P.skids.length > 240) P.skids.shift();
+export function addFloat(G, x, y, text, color = '#ffffff') {
+  G.particles.floats.push({ x, y, text, color, life: 1.4 });
 }
 
-export function floatText(P, x, y, text, color = '#fff') {
-  P.floats.push({ x, y, text, color, life: 1.4, maxLife: 1.4 });
-  if (P.floats.length > 24) P.floats.shift();
-}
-
-export function updateParticles(P, dt) {
-  for (let i = P.list.length - 1; i >= 0; i--) {
-    const p = P.list[i];
+export function updateParticles(G, dt) {
+  for (const p of G.particles.list) {
+    p.life -= dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.vx *= 0.96;
     p.vy *= 0.96;
-    p.life -= dt;
-    if (p.life <= 0) P.list.splice(i, 1);
   }
-  for (let i = P.skids.length - 1; i >= 0; i--) {
-    P.skids[i].life -= dt;
-    if (P.skids[i].life <= 0) P.skids.splice(i, 1);
-  }
-  for (let i = P.floats.length - 1; i >= 0; i--) {
-    const f = P.floats[i];
-    f.y -= 26 * dt;
+  G.particles.list = G.particles.list.filter((p) => p.life > 0);
+  for (const f of G.particles.floats) {
     f.life -= dt;
-    if (f.life <= 0) P.floats.splice(i, 1);
+    f.y -= 28 * dt;
   }
+  G.particles.floats = G.particles.floats.filter((f) => f.life > 0);
 }

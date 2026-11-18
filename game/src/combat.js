@@ -1,98 +1,130 @@
-// Shooting: the player's pistol, gang and police fire, bullets, and what
-// they hit. A bullet is a fast point with a short life; hits are tested
-// against peds, cars and the player, in that order, and the caller decides
-// the consequence through onHit(kind, target, x, y, dmg).
-import { PISTOL_DAMAGE, PISTOL_RANGE, BULLET_SPEED, PISTOL_MAG, RELOAD_TIME } from './config.js';
+// Combat: the player's pistol, police and gang fire, bullets and hit tests.
+// A bullet belongs to an owner ('player', 'police', 'gang') and only hurts the
+// other side. Bullets stop on buildings.
+
+import { hitsBuilding } from './city.js';
+import { damagePed } from './peds.js';
+import { damageCar } from './cars.js';
 
 export function createGun() {
-  return { ammo: PISTOL_MAG, reloading: 0, cooldown: 0 };
+  return { ammo: 12, maxAmmo: 12, cooldown: 0, reloading: 0 };
 }
 
-export function createBullets() {
-  return [];
-}
-
-// Fire one bullet from (x, y) toward an angle. Returns the bullet, or null
-// when the gun is reloading, cooling down, or empty.
-export function fireBullet(bullets, gun, x, y, angle, from, dmg = 12) {
-  if (gun.reloading > 0 || gun.cooldown > 0 || gun.ammo <= 0) return null;
-  gun.ammo -= 1;
-  gun.cooldown = 0.16;
-  bullets.push({
+export function createBullet(x, y, angle, owner, damage) {
+  const speed = 680;
+  return {
     x, y,
-    vx: Math.cos(angle) * BULLET_SPEED,
-    vy: Math.sin(angle) * BULLET_SPEED,
-    life: PISTOL_RANGE / BULLET_SPEED,
-    from, dmg,
-  });
-  return bullets[bullets.length - 1];
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    life: 0.85,
+    owner,
+    damage,
+  };
 }
 
-export function updateGun(gun, dt) {
+export function updateBullets(G, dt) {
+  const P = G.player;
+  for (const b of G.bullets) {
+    b.life -= dt;
+    // Step in small increments so fast bullets cannot tunnel through a ped.
+    const steps = 3;
+    for (let s = 0; s < steps && b.life > 0; s++) {
+      b.x += (b.vx * dt) / steps;
+      b.y += (b.vy * dt) / steps;
+      if (hitsBuilding(G.city, b.x, b.y, 2)) { b.life = 0; break; }
+      if (b.x < 0 || b.x > G.city.worldW || b.y < 0 || b.y > G.city.worldH) { b.life = 0; break; }
+      if (b.owner === 'player') {
+        // Hit a gang member or a walker.
+        for (const ped of G.peds) {
+          if (ped.down) continue;
+          if ((ped.x - b.x) ** 2 + (ped.y - b.y) ** 2 < 17 * 17) {
+            damagePed(G, ped, b.damage);
+            G.addParticles(b.x, b.y, 'spark', 4);
+            if (G.wanted) G.addHeatSilent(0.15);
+            b.life = 0;
+            break;
+          }
+        }
+        if (b.life <= 0) break;
+        // Hit a car (not the one the player drives).
+        for (const car of G.cars) {
+          if (car.dead || car === P.car) continue;
+          if ((car.x - b.x) ** 2 + (car.y - b.y) ** 2 < 24 * 24) {
+            damageCar(G, car, b.damage);
+            G.addParticles(b.x, b.y, 'spark', 4);
+            b.life = 0;
+            break;
+          }
+        }
+      } else {
+        // Enemy fire: hurts the player, or his car first when he is driving.
+        const px = P.x;
+        const py = P.y;
+        if ((px - b.x) ** 2 + (py - b.y) ** 2 < 16 * 16) {
+          if (P.car) damageCar(G, P.car, b.damage, null);
+          else if (G.hurtPlayer) G.hurtPlayer(b.damage);
+          G.addParticles(b.x, b.y, 'spark', 3);
+          b.life = 0;
+          break;
+        }
+        // Enemy bullets can also wreck other cars (a cop shooting a Viper counts).
+        for (const car of G.cars) {
+          if (car.dead || car === P.car) continue;
+          if ((car.x - b.x) ** 2 + (car.y - b.y) ** 2 < 24 * 24) {
+            damageCar(G, car, b.damage, null);
+            b.life = 0;
+            break;
+          }
+        }
+        if (b.life <= 0) break;
+        for (const ped of G.peds) {
+          if (ped.down) continue;
+          // Gang and police crossfire can drop a Viper: it still counts.
+          if (b.owner === 'police' && ped.gang && (ped.x - b.x) ** 2 + (ped.y - b.y) ** 2 < 17 * 17) {
+            damagePed(G, ped, b.damage);
+            G.addParticles(b.x, b.y, 'spark', 4);
+            b.life = 0;
+            break;
+          }
+        }
+      }
+    }
+  }
+  G.bullets = G.bullets.filter((b) => b.life > 0);
+}
+
+// The player's pistol: mouse aim, 12 rounds, R to reload.
+export function playerShoot(G) {
+  const P = G.player;
+  const gun = P.gun;
+  if (gun.reloading > 0 || gun.cooldown > 0) return false;
+  if (gun.ammo <= 0) {
+    gun.reloading = 1.1;
+    return false;
+  }
+  gun.ammo -= 1;
+  gun.cooldown = 0.24;
+  const mx = G.renderer.cam.x + G.input.mouse.x;
+  const my = G.renderer.cam.y + G.input.mouse.y;
+  const angle = Math.atan2(my - P.y, mx - P.x);
+  const ox = P.x + Math.cos(angle) * 20;
+  const oy = P.y + Math.sin(angle) * 20;
+  G.bullets.push(createBullet(ox, oy, angle, 'player', 34));
+  G.shotsFiredAt = 1.5;
+  G.addParticles(ox, oy, 'muzzle', 3);
+  if (G.audio) G.audio.shoot();
+  if (G.wanted) G.addHeatSilent(0.12);
+  return true;
+}
+
+export function updateGun(G, dt) {
+  const gun = G.player.gun;
   gun.cooldown = Math.max(0, gun.cooldown - dt);
   if (gun.reloading > 0) {
     gun.reloading -= dt;
-    if (gun.reloading <= 0) gun.ammo = PISTOL_MAG;
+    if (gun.reloading <= 0) {
+      gun.ammo = gun.maxAmmo;
+      gun.reloading = 0;
+    }
   }
 }
-
-export function reloadGun(gun) {
-  if (gun.ammo < PISTOL_MAG && gun.reloading <= 0) gun.reloading = RELOAD_TIME;
-}
-
-// Move bullets; test hits against peds, cars and the player.
-// stats (optional) counts outcomes the caller doesn't: {wall, expired}.
-export function updateBullets(bullets, dt, city, peds, cars, player, onHit, stats) {
-  for (let i = bullets.length - 1; i >= 0; i--) {
-    const b = bullets[i];
-    b.x += b.vx * dt;
-    b.y += b.vy * dt;
-    b.life -= dt;
-    let dead = b.life <= 0;
-    if (b.life <= 0 && stats) stats.expired = (stats.expired ?? 0) + 1;
-    if (!dead) {
-      // Buildings stop bullets.
-      for (const bd of city.buildings) {
-        if (b.x > bd.x && b.x < bd.x + bd.w && b.y > bd.y && b.y < bd.y + bd.h) {
-          dead = true;
-          if (stats) stats.wall = (stats.wall ?? 0) + 1;
-          break;
-        }
-      }
-    }
-    if (!dead && b.from !== 'player') {
-      // Enemy fire can hit the player.
-      if (Math.hypot(b.x - player.x, b.y - player.y) < 14) {
-        onHit('player', player, b.x, b.y, b.dmg ?? 12);
-        dead = true;
-      }
-    }
-    if (!dead && b.from === 'player') {
-      for (const p of peds) {
-        if (p.down) continue;
-        if (Math.hypot(b.x - p.x, b.y - p.y) < 13) {
-          onHit('ped', p, b.x, b.y);
-          dead = true;
-          break;
-        }
-      }
-    }
-    if (!dead && b.from === 'player') {
-      for (const c of cars) {
-        if (c.dead) continue;
-        const dx = b.x - c.x;
-        const dy = b.y - c.y;
-        const along = dx * Math.cos(c.angle) + dy * Math.sin(c.angle);
-        const side = -dx * Math.sin(c.angle) + dy * Math.cos(c.angle);
-        if (Math.abs(along) < c.len / 2 && Math.abs(side) < c.wid / 2) {
-          onHit('car', c, b.x, b.y);
-          dead = true;
-          break;
-        }
-      }
-    }
-    if (dead) bullets.splice(i, 1);
-  }
-}
-
-export { PISTOL_DAMAGE };

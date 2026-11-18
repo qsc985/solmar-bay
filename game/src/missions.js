@@ -1,102 +1,146 @@
-// The story: Danny Reyes, a driver for hire in Solmar Bay, works off a debt
-// to the fixer Lena Cruz. Five missions, then free roam with taxi fares. Each
-// mission is a small state machine: an objective, a target point, and the thing
-// that completes it. Coordinates are world units on the 2600 x 1900 map.
-export const MISSION_DEFS = [
-  {
-    id: 'fare', name: 'First Fare', reward: 150,
-    brief: 'Lena: "A client waits at the hotel. Take the yellow taxi and bring him to the pier — and don\'t scratch it."',
-    objective: 'Get in the taxi, then drive to the pier marker',
-    start: { x: 500, y: 460 }, // taxi depot
-    target: { x: 2050, y: 1560, r: 70 }, // pier
-    kind: 'drive',
-  },
-  {
-    id: 'package', name: 'The Package', reward: 200,
-    brief: 'Lena: "A package is stashed in the alley behind the market. Walk it to the docks — on foot, no attention."',
-    objective: 'Pick up the package (E), then walk it to the docks',
-    start: { x: 1100, y: 950 },
-    pickup: { x: 1130, y: 1010, r: 34 },
-    target: { x: 2080, y: 1360, r: 70 },
-    kind: 'fetch',
-  },
-  {
-    id: 'wheels', name: 'Hot Wheels', reward: 350,
-    brief: 'Lena: "A red Comet GT sits in the showroom lot on 5th. Borrow it. The cops will notice — lose them."',
-    objective: 'Steal the red sports car, then lose your wanted level',
-    start: { x: 1700, y: 700 },
-    target: { x: 1700, y: 700, r: 60 }, // showroom lot
-    kind: 'steal',
-  },
-  {
-    id: 'payback', name: 'Payback', reward: 500,
-    brief: 'Lena: "The Vipers jumped one of my drivers at the docks. Four of them. Make it even."',
-    objective: 'Defeat all 4 Vipers at the docks',
-    start: { x: 2050, y: 1300 },
-    target: { x: 2120, y: 1360, r: 130 },
-    kind: 'fight',
-  },
-  {
-    id: 'score', name: 'The Big Score', reward: 1000,
-    brief: 'Lena: "Solmar Bank, noon. Grab the bag, and whatever you do — don\'t get caught. Meet me at the safehouse."',
-    objective: 'Grab the cash at the bank, then reach the safehouse',
-    start: { x: 1150, y: 760 },
-    pickup: { x: 1180, y: 790, r: 34 },
-    target: { x: 240, y: 270, r: 80 },
-    kind: 'score',
-  },
-];
+// The story: five missions in a chain, each paying cash, shown as objectives.
+// index = missions completed (0..5); stage = what the player must do right now.
+// The playtests drive this exact machine, so the stage names and targets matter:
+//   M1 'taxi'    -> drive the taxi to the pier
+//   M2 'pickup'  -> walk to the package, E to take it; 'deliver' -> carry it to the pier
+//   M3 'steal'   -> take the red Comet GT; 'evade' -> lose the 3-star heat
+//   M4 'gang'    -> drop all four Vipers at the docks
+//   M5 'grab'    -> take the bank cash, E; 'escape' -> reach the safehouse
+//   index 5      -> free roam
+
+import { PIER, PACKAGE_SPOT, BANK_CASH, SAFEHOUSE, MISSION_PAY, MISSION_NAMES } from './config.js';
+import { spawnGang } from './peds.js';
+import { setWanted } from './police.js';
 
 export function createMissions() {
-  return {
-    index: 0, // 0..4 story, 5 = free roam
-    stage: 'go', // go | pickup | deliver | escape | done
-    done: false,
-    banner: '', bannerT: 0,
-    dialogue: '', dialogueT: 0,
-    fare: null, // active taxi fare {from, to, pay}
-    killed: 0, // Vipers down in the Payback mission
-  };
+  return { index: 0, stage: 'taxi' };
 }
 
-export function currentMission(M) {
-  return MISSION_DEFS[M.index] ?? null;
+export function missionName(G) {
+  if (G.missions.index >= 5) return 'Free Roam';
+  return MISSION_NAMES[G.missions.index];
 }
 
-// The marker the renderer draws for the current objective, or null.
-export function missionTarget(M) {
-  const m = currentMission(M);
-  if (!m) return null;
-  if (m.id === 'wheels' && M.stage === 'escape') return null; // no marker while losing the cops
-  if (M.stage === 'pickup' && m.pickup) return m.pickup;
-  return m.target;
+export function missionObjective(G) {
+  const m = G.missions;
+  switch (m.index) {
+    case 0: return 'M1 Taxi Driver — get in the yellow taxi and drive your fare to the pier';
+    case 1: return m.stage === 'pickup'
+      ? 'M2 The Package — walk to the package and press E to pick it up'
+      : 'M2 The Package — carry the package to the pier';
+    case 2: return m.stage === 'steal'
+      ? 'M3 Grand Theft — steal the red Comet GT parked uptown'
+      : 'M3 Grand Theft — lose the cops (3 stars) and the heat';
+    case 3: return 'M4 Viper Hunt — drop all four Vipers at the docks';
+    case 4: return m.stage === 'grab'
+      ? 'M5 The Big Score — grab the bank cash (press E at the bank)'
+      : 'M5 The Big Score — escape the 4-star heat: reach the safehouse';
+    default: return 'Free roam — Solmar Bay is yours. Earn cash, steal cars, dodge the law.';
+  }
 }
 
-export function setBanner(M, text, t = 2.6) {
-  M.banner = text;
-  M.bannerT = t;
+// Where the pulsing objective marker points right now.
+export function currentTarget(G) {
+  const m = G.missions;
+  switch (m.index) {
+    case 0: return { ...PIER };
+    case 1: return m.stage === 'pickup' ? { ...PACKAGE_SPOT } : { ...PIER };
+    case 2: return m.stage === 'steal' ? { x: 1700, y: 700 } : null;
+    case 3: return { x: 2080, y: 1340 };
+    case 4: return m.stage === 'grab' ? { ...BANK_CASH } : { ...SAFEHOUSE };
+    default: return null;
+  }
 }
 
-export function setDialogue(M, text, t = 5) {
-  M.dialogue = text;
-  M.dialogueT = t;
+function pay(G, n) {
+  G.player.cash += MISSION_PAY[n];
+  // A job done patches Danny up a little — the chain stays survivable.
+  G.player.health = Math.min(100, G.player.health + 30);
+  G.addFloat(G.player.x, G.player.y - 26, `+$${MISSION_PAY[n]}`, '#ffd23f');
+  if (G.audio) G.audio.pickup();
+  if (G.saveGame) G.saveGame();
 }
 
-export function updateMissions(M, dt) {
-  M.bannerT = Math.max(0, M.bannerT - dt);
-  M.dialogueT = Math.max(0, M.dialogueT - dt);
+export function updateMissions(G, dt) {
+  const m = G.missions;
+  const P = G.player;
+  if (m.index >= 5) return;
+  if (m.index === 0) {
+    // M1: in the taxi, within range of the pier.
+    if (P.car && P.car.type === 'taxi' && Math.hypot(P.x - PIER.x, P.y - PIER.y) < 80) {
+      pay(G, 0);
+      m.index = 1;
+      m.stage = 'pickup';
+      G.pickup = { ...PACKAGE_SPOT };
+    }
+  } else if (m.index === 1) {
+    if (m.stage === 'deliver' && Math.hypot(P.x - PIER.x, P.y - PIER.y) < 80) {
+      pay(G, 1);
+      m.index = 2;
+      m.stage = 'steal';
+      G.pickup = null;
+    }
+  } else if (m.index === 2) {
+    if (m.stage === 'evade' && G.wanted.stars <= 0) {
+      pay(G, 2);
+      m.index = 3;
+      m.stage = 'gang';
+      spawnGang(G, 2080, 1340);
+    }
+  } else if (m.index === 3) {
+    const alive = G.peds.filter((p) => p.gang && !p.down).length;
+    if (alive === 0 && G.peds.some((p) => p.gang)) {
+      pay(G, 3);
+      m.index = 4;
+      m.stage = 'grab';
+    }
+  } else if (m.index === 4) {
+    if (m.stage === 'escape' && Math.hypot(P.x - SAFEHOUSE.x, P.y - SAFEHOUSE.y) < 80) {
+      pay(G, 4);
+      m.index = 5;
+      m.stage = 'free';
+      setWanted(G, 0);
+      G.screen = 'win';
+      if (G.saveGame) G.saveGame();
+    }
+  }
 }
 
-// A repeatable taxi fare for free roam: pick a random hotel/casino, drive the client there.
-export function startFare(rng, city) {
-  const spots = [
-    { x: 500, y: 200, name: 'Hotel Miramar' },
-    { x: 2300, y: 450, name: 'Casino Sol' },
-    { x: 200, y: 1450, name: 'Marina' },
-    { x: 1400, y: 200, name: 'Airport' },
-    { x: 2300, y: 1700, name: 'Pier' },
-    { x: 800, y: 1200, name: 'Plaza' },
-  ];
-  const to = rng.pick(spots);
-  return { to, pay: rng.int(40, 90) };
+// The E key: context action for the current mission stage.
+export function missionInteract(G) {
+  const m = G.missions;
+  const P = G.player;
+  if (m.index === 1 && m.stage === 'pickup' && G.pickup) {
+    if (Math.hypot(P.x - G.pickup.x, P.y - G.pickup.y) < 60) {
+      m.stage = 'deliver';
+      G.pickup = null;
+      if (G.audio) G.audio.pickup();
+      return true;
+    }
+  }
+  if (m.index === 4 && m.stage === 'grab') {
+    if (Math.hypot(P.x - BANK_CASH.x, P.y - BANK_CASH.y) < 60) {
+      m.stage = 'escape';
+      setWanted(G, 4);
+      G.addFloat(P.x, P.y - 26, 'BANK CASH!', '#ffd23f');
+      if (G.audio) G.audio.pickup();
+      return true;
+    }
+  }
+  return false;
+}
+
+// Debug helper (used by the playtest diagnostics): jump to a mission.
+export function startMission(G, n) {
+  const m = G.missions;
+  m.index = n;
+  if (n === 0) { m.stage = 'taxi'; G.pickup = null; }
+  if (n === 1) { m.stage = 'pickup'; G.pickup = { ...PACKAGE_SPOT }; }
+  if (n === 2) { m.stage = 'steal'; G.pickup = null; }
+  if (n === 3) {
+    m.stage = 'gang';
+    if (!G.peds.some((p) => p.gang)) spawnGang(G, 2080, 1340);
+  }
+  if (n === 4) { m.stage = 'grab'; G.pickup = null; }
+  if (n >= 5) { m.stage = 'free'; }
 }

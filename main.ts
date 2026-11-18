@@ -1,15 +1,15 @@
-// SOLMAR BAY — the entrypoint that assembles the game for the judge (Node 22,
-// standard library only).
+// SOLMAR BAY hands itself in (Node 22, standard library only): the game is this
+// directory's game/ folder, plain static files a desktop browser loads offline
+// (game/index.html and its ES modules, no library and no network request), and
+// this program copies game/ and screenshots/ from beside this file to /output and
+// writes /output/dossier.json, the summary the judge reads, with the vendored
+// make.fun library.
 //
-// The game is plain static files under game/ (game/index.html plus its ES
-// modules — no build step, no network at run time). This program copies game/
-// and screenshots/ into the output directory and writes dossier.json, the
-// summary the judge reads, using the vendored make.fun library. Run it locally:
-//
-//   MAKEFUN_OUTPUT_DIR=out node main.ts
-//
-// In the grader the output directory is /output.
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+
+import { cpSync, existsSync, mkdirSync, writeFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -17,25 +17,32 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
+// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
+// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
+// screenshots/ and dossier.json).
+const DOSSIER_MAX_BYTES = 1572864; // the gate's 1.5 MiB cap on dossier.json
+
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) {
-  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
-}
+if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-// The scorer's caps (from reference/gate.json): only text_max_bytes shapes
-// the bytes; the rest refuse an entry the scorer would refuse — more than 4
-// screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of
-// game files in all, or a path under game/ over 1000 bytes (game/ counts
-// beside /output's own 1000-entry cap, its screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+const dossier = buildDossier(out, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
+});
+writeFileSync(join(out, 'dossier.json'), dossier);
+
+// Verify the handoff before the grader sees it: the dossier must fit the gate's
+// byte cap, and a short summary makes a bad build obvious at a glance.
+const dossierBytes = statSync(join(out, 'dossier.json')).size;
+if (dossierBytes > DOSSIER_MAX_BYTES) {
+  throw new Error(`dossier.json is ${dossierBytes} bytes, over the gate's ${DOSSIER_MAX_BYTES} cap`);
+}
+const gameFiles = readdirSync(join(out, 'game'), { recursive: true }).length;
+const shots = readdirSync(join(out, 'screenshots')).filter((f) => !f.startsWith('.'));
+console.log(`SOLMAR BAY handed in: ${gameFiles} game entries, ${shots.length} screenshots, dossier ${dossierBytes} bytes`);
