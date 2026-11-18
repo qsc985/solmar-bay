@@ -1,31 +1,45 @@
-// Pedestrians: they stroll the sidewalks, chat in place, and run when scared.
-// Gang members are armed peds that hold a spot and shoot at the player.
+// Pedestrians: they stroll the sidewalks, idle in place, and run when
+// scared. Gang members are armed peds that hold a spot and shoot at the player.
 import { sidewalkPoint } from './city.js';
 import { clamp, angleDiff } from './random.js';
 
 const SHIRTS = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#ecf0f1', '#fd79a8'];
+const SKINS = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524'];
 let nextId = 1;
 
 export function makePed(rng, city, opts = {}) {
   const p = sidewalkPoint(rng, city);
   return {
-    id: nextId++, x: opts.x ?? p.x, y: opts.y ?? p.y,
-    angle: rng.range(0, Math.PI * 2), speed: 0,
-    shirt: rng.pick(SHIRTS), skin: rng.pick(['#f1c27d', '#e0ac69', '#c68642', '#8d5524']),
+    id: nextId++,
+    x: opts.x ?? p.x,
+    y: opts.y ?? p.y,
+    angle: rng.range(0, Math.PI * 2),
+    speed: 0,
+    shirt: rng.pick(SHIRTS),
+    skin: rng.pick(SKINS),
     state: 'walk', // walk | idle | flee | down | gang
-    target: null, wait: rng.range(0, 4), health: 100,
-    gang: !!opts.gang, gun: !!opts.gang, shootCd: rng.range(0.5, 1.5),
-    down: false, fleeT: 0,
+    target: null,
+    wait: rng.range(0, 4),
+    health: 100,
+    gang: !!opts.gang,
+    gun: !!opts.gang,
+    shootCd: rng.range(0.5, 1.5),
+    down: false,
+    fleeT: 0,
   };
 }
 
 export function updatePeds(peds, dt, rng, city, danger) {
   for (const p of peds) {
     if (p.down) continue;
-    if (p.gang) { updateGang(p, dt, danger); continue; }
+    if (p.gang) {
+      updateGang(p, dt, danger);
+      continue;
+    }
     // Flee from gunfire or a speeding car nearby.
     if (danger.near(p.x, p.y, 130)) {
-      p.state = 'flee'; p.fleeT = 2.2;
+      p.state = 'flee';
+      p.fleeT = 2.2;
     }
     if (p.state === 'flee') {
       p.fleeT -= dt;
@@ -35,25 +49,39 @@ export function updatePeds(peds, dt, rng, city, danger) {
       p.x += Math.cos(p.angle) * p.speed * dt;
       p.y += Math.sin(p.angle) * p.speed * dt;
       const c = city.collideCircle(p.x, p.y, 10);
-      p.x = c.x; p.y = c.y;
+      p.x = c.x;
+      p.y = c.y;
       if (p.fleeT <= 0) p.state = 'walk';
       continue;
     }
     p.wait -= dt;
     if (p.state === 'idle') {
-      if (p.wait <= 0) { p.state = 'walk'; p.target = sidewalkPoint(rng, city); }
+      if (p.wait <= 0) {
+        p.state = 'walk';
+        p.target = sidewalkPoint(rng, city);
+      }
       continue;
     }
-    if (!p.target) { p.target = sidewalkPoint(rng, city); continue; }
-    const dx = p.target.x - p.x, dy = p.target.y - p.y;
+    if (!p.target) {
+      p.target = sidewalkPoint(rng, city);
+      continue;
+    }
+    const dx = p.target.x - p.x;
+    const dy = p.target.y - p.y;
     const d = Math.hypot(dx, dy);
-    if (d < 12) { p.state = 'idle'; p.wait = rng.range(2, 7); p.speed = 0; continue; }
+    if (d < 12) {
+      p.state = 'idle';
+      p.wait = rng.range(2, 7);
+      p.speed = 0;
+      continue;
+    }
     const want = Math.atan2(dy, dx);
     p.angle += angleDiff(p.angle, want) * Math.min(1, 6 * dt);
     p.speed = 52;
     p.x += Math.cos(p.angle) * p.speed * dt;
     p.y += Math.sin(p.angle) * p.speed * dt;
-    p.x = clamp(p.x, 20, 2580); p.y = clamp(p.y, 20, 1880);
+    p.x = clamp(p.x, 20, 2580);
+    p.y = clamp(p.y, 20, 1880);
   }
 }
 

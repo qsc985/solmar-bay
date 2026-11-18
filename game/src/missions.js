@@ -1,6 +1,7 @@
-// The story: Danny Reyes, a driver for hire in Solmar Bay, works off a debt to the fixer
-// Lena Cruz. Five missions, then free roam with taxi fares. Each mission is a small state
-// machine: an objective, a target point, and the thing that completes it.
+// The story: Danny Reyes, a driver for hire in Solmar Bay, works off a debt
+// to the fixer Lena Cruz. Five missions, then free roam with taxi fares. Each
+// mission is a small state machine: an objective, a target point, and the thing
+// that completes it. Coordinates are world units on the 2600 x 1900 map.
 export const MISSION_DEFS = [
   {
     id: 'fare', name: 'First Fare', reward: 150,
@@ -54,10 +55,15 @@ export function createMissions() {
     banner: '', bannerT: 0,
     dialogue: '', dialogueT: 0,
     fare: null, // active taxi fare {from, to, pay}
-    killed: 0,
+    killed: 0, // Vipers down in the Payback mission
   };
 }
-export function currentMission(M) { return MISSION_DEFS[M.index] ?? null; }
+
+export function currentMission(M) {
+  return MISSION_DEFS[M.index] ?? null;
+}
+
+// The marker the renderer draws for the current objective, or null.
 export function missionTarget(M) {
   const m = currentMission(M);
   if (!m) return null;
@@ -65,8 +71,17 @@ export function missionTarget(M) {
   if (M.stage === 'pickup' && m.pickup) return m.pickup;
   return m.target;
 }
-export function setBanner(M, text, t = 2.6) { M.banner = text; M.bannerT = t; }
-export function setDialogue(M, text, t = 5) { M.dialogue = text; M.dialogueT = t; }
+
+export function setBanner(M, text, t = 2.6) {
+  M.banner = text;
+  M.bannerT = t;
+}
+
+export function setDialogue(M, text, t = 5) {
+  M.dialogue = text;
+  M.dialogueT = t;
+}
+
 export function updateMissions(M, dt) {
   M.bannerT = Math.max(0, M.bannerT - dt);
   M.dialogueT = Math.max(0, M.dialogueT - dt);
@@ -75,9 +90,12 @@ export function updateMissions(M, dt) {
 // A repeatable taxi fare for free roam: pick a random hotel/casino, drive the client there.
 export function startFare(rng, city) {
   const spots = [
-    { x: 500, y: 200, name: 'Hotel Miramar' }, { x: 2300, y: 450, name: 'Casino Sol' },
-    { x: 200, y: 1450, name: 'Marina' }, { x: 1400, y: 200, name: 'Airport' },
-    { x: 2300, y: 1700, name: 'Pier' }, { x: 800, y: 1200, name: 'Plaza' },
+    { x: 500, y: 200, name: 'Hotel Miramar' },
+    { x: 2300, y: 450, name: 'Casino Sol' },
+    { x: 200, y: 1450, name: 'Marina' },
+    { x: 1400, y: 200, name: 'Airport' },
+    { x: 2300, y: 1700, name: 'Pier' },
+    { x: 800, y: 1200, name: 'Plaza' },
   ];
   const to = rng.pick(spots);
   return { to, pay: rng.int(40, 90) };

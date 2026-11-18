@@ -1,15 +1,23 @@
-// SOLMAR BAY — tuning and palette. One place for every number the game balances on.
+// SOLMAR BAY — the single source of truth for every number in the game.
+//
+// World: a 2600 x 1900 coastal city, seen through a fixed 1280 x 720 view.
+// The simulation steps at 60 Hz. Everything that tunes how the game feels
+// lives here, so a balance change is one edit, never a hunt through systems.
+
+// View and world geometry.
+export const VIEW_W = 1280;
+export const VIEW_H = 720;
 export const WORLD = { w: 2600, h: 1900, beachY: 1760, waterY: 1852 };
-export const STEP = 1 / 60;
+export const STEP = 1 / 60; // fixed simulation step, in seconds
 export const SAVE_KEY = 'solmar-bay-save-v1';
 
-// Player on foot
+// On foot.
 export const WALK_SPEED = 175;
 export const RUN_SPEED = 265;
 export const PLAYER_R = 13;
 export const PLAYER_HEALTH = 100;
 
-// Cars
+// Cars: len/wid are the collision box; accel/top/grip are the arcade handling.
 export const CAR_TYPES = {
   sedan: { len: 46, wid: 22, accel: 330, top: 380, grip: 3.4, color: '#c94f43' },
   taxi: { len: 46, wid: 22, accel: 330, top: 380, grip: 3.4, color: '#f2b705' },
@@ -23,25 +31,28 @@ export const TRAFFIC_SPEED = 120;
 export const TRAFFIC_COUNT = 16;
 export const PED_COUNT = 26;
 
-// Wanted
+// Wanted level: heat runs 0..100, one star per 20 heat. Crimes add heat;
+// after 8 quiet seconds it bleeds away.
 export const WANTED_MAX = 5;
 export const HEAT_PER_STAR = 20;
-export const HEAT_DECAY = 1.4; // per second, only while quiet
+export const HEAT_DECAY = 1.4;
 export const CRIME_CAR_THEFT = 22;
 export const CRIME_HIT_PED = 26;
 export const CRIME_SHOOT = 18;
 export const CRIME_KILL_COP = 30;
 
-// Combat
+// The player's pistol.
 export const PISTOL_DAMAGE = 34;
 export const PISTOL_MAG = 12;
 export const PISTOL_RANGE = 520;
 export const BULLET_SPEED = 950;
 export const RELOAD_TIME = 1.2;
 
-// Palette: a sun-soaked coastal city at golden hour.
+// Palette: golden-hour coastal city. `ground`, `beach` and `sea` are what the
+// renderer paints the base map with; the rest are accents and UI.
 export const PAL = {
-  grass: '#8fc97e', grassDark: '#7fb96f', sand: '#f2ddab', water: '#3fb8c9', waterDeep: '#2a9db0',
+  ground: '#8fc97e', grassDark: '#7fb96f',
+  beach: '#f2ddab', sea: '#3fb8c9', seaDeep: '#2a9db0',
   road: '#4a4a52', roadEdge: '#3a3a42', sidewalk: '#b9b3a4', line: '#e8d44d',
   buildingRoof: ['#e8a87c', '#d9c9a3', '#a8c3d9', '#e58e8e', '#b5d3a7', '#d9b8d0', '#f0e0b8', '#9fb8c8'],
   park: '#6db36a', tree: '#3f7d3a', treeDark: '#2f6130',

@@ -1,13 +1,17 @@
-// The player: Danny Reyes, on foot or behind the wheel. On foot he walks, runs and shoots;
-// in a car the car is the body. Entering and leaving cars is the hinge of the whole game.
+// The player: Danny Reyes, on foot or behind the wheel. On foot he walks,
+// runs and shoots; in a car the car is the body. Entering and leaving cars
+// is the hinge of the whole game.
 import { WALK_SPEED, RUN_SPEED, PLAYER_R, PLAYER_HEALTH } from './config.js';
 import { clamp } from './random.js';
 import { createGun } from './combat.js';
 
 export function createPlayer(x, y) {
   return {
-    x, y, angle: -Math.PI / 2, speed: 0,
-    health: PLAYER_HEALTH, cash: 0,
+    x, y,
+    angle: -Math.PI / 2,
+    speed: 0,
+    health: PLAYER_HEALTH,
+    cash: 0,
     car: null, // the car being driven, or null on foot
     gun: createGun(),
     invuln: 0, // brief grace after being hit
@@ -26,7 +30,8 @@ export function updateOnFoot(P, input, dt, city) {
     P.x += (axis.x / len) * speed * dt;
     P.y += (axis.y / len) * speed * dt;
     const c = city.collideCircle(P.x, P.y, PLAYER_R);
-    P.x = c.x; P.y = c.y;
+    P.x = c.x;
+    P.y = c.y;
   }
   P.speed = P.moving ? speed : 0;
   P.invuln = Math.max(0, P.invuln - dt);
@@ -34,11 +39,15 @@ export function updateOnFoot(P, input, dt, city) {
 
 // Nearest car the player could enter (within reach, not wrecked).
 export function nearestEnterableCar(P, cars) {
-  let best = null, bd = 46 * 46;
+  let best = null;
+  let bd = 46 * 46;
   for (const c of cars) {
     if (c.dead || c.health <= 0) continue;
     const d = (c.x - P.x) ** 2 + (c.y - P.y) ** 2;
-    if (d < bd) { bd = d; best = c; }
+    if (d < bd) {
+      bd = d;
+      best = c;
+    }
   }
   return best;
 }
@@ -61,4 +70,7 @@ export function hurtPlayer(P, dmg) {
   P.invuln = 0.4;
   return P.health <= 0;
 }
-export function healPlayer(P, amount) { P.health = clamp(P.health + amount, 0, PLAYER_HEALTH); }
+
+export function healPlayer(P, amount) {
+  P.health = clamp(P.health + amount, 0, PLAYER_HEALTH);
+}

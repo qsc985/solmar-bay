@@ -1,5 +1,7 @@
-// A tiny static server for game/ (Node 22, standard library only), so the entry can be
-// played locally without a build step: `node serve.ts` serves game/ on http://localhost:8080.
+// A minimal static server for game/ (Node 22, standard library only), so the
+// entry can be played locally with no build step:
+//   node serve.ts            -> http://localhost:8080
+//   node serve.ts --port 8909
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -32,6 +34,7 @@ createServer((request, response) => {
     return;
   }
   if (pathname.endsWith('/')) pathname += 'index.html';
+  // Never serve a path outside game/.
   const file = resolve(join(root, normalize(pathname)));
   if (file !== root && !file.startsWith(root + sep)) {
     response.writeHead(403).end('forbidden');
